@@ -1,6 +1,6 @@
-# 腾讯算法大赛 
+# 腾讯广告算法大赛-全模态生成式推荐 All-Modality Generative Recommendation 
 
-基于 Transformer 的序列推荐模型，在官方 Baseline 基础上进行了多项深度优化。
+基于 Transformer 的序列推荐模型，在官方 Baseline 基础上进行了多项深度优化。 初赛前10%左右
 
 ## 核心改进点 (对比 Baseline)
 
