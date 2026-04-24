@@ -1,5 +1,7 @@
 # import json
-import os, sys; os.system(f'"{sys.executable}" -m pip install --quiet orjson')
+import os, sys
+# 比赛环境需要运行时安装: os.system(f'"{sys.executable}" -m pip install --quiet orjson')
+# 本地环境请提前安装: pip install orjson
 import orjson as json # <-- 换成这个
 import pickle
 import struct
@@ -557,9 +559,13 @@ class MyDataset(torch.utils.data.Dataset):
         for feat_id in feat_types['item_continual']:
             feat_default_value[feat_id] = 0.0 # 使用浮点数0.0
         for feat_id in feat_types['item_emb']:
-            feat_default_value[feat_id] = np.zeros(
-                list(self.mm_emb_dict[feat_id].values())[0].shape[0], dtype=np.float32
-            )
+            if feat_id in self.mm_emb_dict and len(self.mm_emb_dict[feat_id]) > 0:
+                dim = list(self.mm_emb_dict[feat_id].values())[0].shape[0]
+            else:
+                SHAPE_DICT = {"81": 32, "82": 1024, "83": 3584, "84": 4096, "85": 3584, "86": 3584}
+                dim = SHAPE_DICT.get(feat_id, 1024)
+                print(f"  ⚠️ mm_emb[{feat_id}] 为空, 使用默认维度 {dim}")
+            feat_default_value[feat_id] = np.zeros(dim, dtype=np.float32)
 
         return feat_default_value, feat_types, feat_statistics
 
@@ -1048,18 +1054,49 @@ def load_mm_emb(mm_path, feat_ids):
     加载多模态特征Embedding
 
     Args:
-        mm_path: 多模态特征Embedding路径
+        mm_path: 多模态特征Embedding路径 (creative_emb/ 或 data/ 的父目录)
         feat_ids: 要加载的多模态特征ID列表
 
     Returns:
         mm_emb_dict: 多模态特征Embedding字典，key为特征ID，value为特征Embedding字典（key为item ID，value为Embedding）
+
+    支持三种数据源 (按优先级):
+        1. Parquet 格式: mm_emb/emb_{id}_{dim}_parquet/*.parquet (HF下载原始格式)
+        2. JSON 格式: creative_emb/emb_{id}_{dim}/*.json (比赛转换格式)
+        3. PKL 格式: creative_emb/emb_{id}_{dim}.pkl (仅 emb_81)
     """
     SHAPE_DICT = {"81": 32, "82": 1024, "83": 3584, "84": 4096, "85": 3584, "86": 3584}
     mm_emb_dict = {}
+    mm_path = Path(mm_path)
+    # HF parquet 目录: mm_path 的兄弟目录 mm_emb/
+    parquet_base = mm_path.parent / "mm_emb"
+
     for feat_id in tqdm(feat_ids, desc='Loading mm_emb'):
         shape = SHAPE_DICT[feat_id]
         emb_dict = {}
-        if feat_id != '81':
+
+        # 优先尝试 Parquet 格式 (HF 下载的原始数据, 更紧凑)
+        parquet_dir = parquet_base / f'emb_{feat_id}_{shape}_parquet'
+        if parquet_dir.exists() and list(parquet_dir.glob('*.parquet')):
+            import pyarrow.parquet as pq
+            pq_files = sorted(parquet_dir.glob('*.parquet'))
+            print(f'  Loading #{feat_id} from parquet ({len(pq_files)} files)...')
+            for pf in tqdm(pq_files, desc=f'  emb_{feat_id}', leave=False):
+                import pandas as pd
+                df = pd.read_parquet(pf)
+                id_col = 'anonymous_cid' if 'anonymous_cid' in df.columns else 'item_id'
+                emb_col = 'emb' if 'emb' in df.columns else 'embedding'
+                ids = df[id_col].values
+                embs = df[emb_col].values
+                for j in range(len(df)):
+                    emb_val = embs[j]
+                    if not isinstance(emb_val, np.ndarray):
+                        emb_val = np.array(emb_val, dtype=np.float32)
+                    emb_dict[str(ids[j])] = emb_val
+                del df
+
+        # 其次尝试 JSON 格式 (转换后的比赛格式)
+        elif feat_id != '81':
             try:
                 base_path = Path(mm_path, f'emb_{feat_id}_{shape}')
                 for json_file in base_path.glob('*.json'):
@@ -1073,9 +1110,13 @@ def load_mm_emb(mm_path, feat_ids):
                             emb_dict.update(data_dict)
             except Exception as e:
                 print(f"transfer error: {e}")
-        if feat_id == '81':
-            with open(Path(mm_path, f'emb_{feat_id}_{shape}.pkl'), 'rb') as f:
+
+        # PKL 格式 (仅 emb_81)
+        pkl_path = Path(mm_path, f'emb_{feat_id}_{shape}.pkl')
+        if feat_id == '81' and not emb_dict and pkl_path.exists():
+            with open(pkl_path, 'rb') as f:
                 emb_dict = pickle.load(f)
+
         mm_emb_dict[feat_id] = emb_dict
-        print(f'Loaded #{feat_id} mm_emb')
+        print(f'Loaded #{feat_id} mm_emb: {len(emb_dict):,} items')
     return mm_emb_dict

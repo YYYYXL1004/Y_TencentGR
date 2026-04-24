@@ -1,0 +1,29 @@
+# === 大文件 / 模型 / 数据 ===
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.ckpt
+data/
+models/
+log/
+log_tensorboard/
+runs/
+cache/
+ckpt/
+results/
+__pycache__/
+*.pyc
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+.cursor/
+
+# === 临时文件 ===
+*.tmp
+temp_*

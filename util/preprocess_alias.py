@@ -1,6 +1,7 @@
 import os
 import sys
-os.system(f'"{sys.executable}" -m pip install --quiet orjson')
+# 比赛环境需要运行时安装: os.system(f'"{sys.executable}" -m pip install --quiet orjson')
+# 本地环境请提前安装: pip install orjson
 import orjson as json
 from pathlib import Path
 from collections import Counter
@@ -8,6 +9,8 @@ import numpy as np
 from tqdm import tqdm
 import pickle
 # 确保你的 dataset.py 和这个脚本在同一个目录，或者在 Python Path 中
+# 本地运行时，从项目根目录添加到 sys.path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dataset import AliasMethod 
 
 def run_complete_preprocessing():

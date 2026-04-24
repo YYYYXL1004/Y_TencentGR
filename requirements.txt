@@ -1,0 +1,8 @@
+torch>=2.0.0
+numpy
+pandas
+pyarrow
+orjson
+tqdm
+tensorboard
+huggingface_hub
